@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "PokeDex",
-    "slug": "PokeDex",
+    "name": "ProyectoPokeAPI",
+    "slug": "ProyectoPokeAPI",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "pokedex",
+    "scheme": "proyectopokeapi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
