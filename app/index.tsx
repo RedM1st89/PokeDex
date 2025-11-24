@@ -90,6 +90,10 @@ export default function PokedexScreen() {
     setLoadingPokemon(true);
     try {
       const offset = page * ITEMS_PER_PAGE;
+      
+      console.log('=== Fetching Pokemon ===');
+      console.log('API_BASE:', API_BASE);
+      console.log('Page:', page, 'Filter:', filter, 'Search:', search);
 
       if (filter === 'favorites') {
         // Display favorites from the already fetched list
@@ -148,8 +152,16 @@ export default function PokedexScreen() {
           setTotalPokemon(data.count);
         }
       } else {
+        console.log('Fetching all pokemon, URL:', `${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`);
         const response = await fetch(`${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`);
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('Pokemon list data:', data);
 
         const detailedPokemon = await Promise.all(
           data.results.map(async (p: any) => {
@@ -159,6 +171,7 @@ export default function PokedexScreen() {
           })
         );
 
+        console.log('Detailed pokemon:', detailedPokemon);
         setPokemon(detailedPokemon);
         setTotalPokemon(data.total);
       }
@@ -173,10 +186,18 @@ export default function PokedexScreen() {
 
   // Toggle favorite - works with the backend endpoints
   const toggleFavorite = async (poke: Pokemon) => {
-    if (!user) return;
+    if (!user) {
+      console.error('No user found, cannot toggle favorite');
+      Alert.alert('Error', 'You must be logged in to favorite Pokémon');
+      return;
+    }
 
     const isFavorited = favoriteIds.includes(poke.pokeId);
-    console.log(`Toggling favorite for ${poke.name} (ID: ${poke.pokeId}), currently favorited: ${isFavorited}`);
+    console.log('=== Toggle Favorite ===');
+    console.log(`Pokemon: ${poke.name} (ID: ${poke.pokeId})`);
+    console.log(`Currently favorited: ${isFavorited}`);
+    console.log(`User UID: ${user.uid}`);
+    console.log(`API_BASE: ${API_BASE}`);
 
     // Optimistic UI update
     const previousFavorites = [...favorites];
@@ -185,25 +206,34 @@ export default function PokedexScreen() {
     try {
       if (isFavorited) {
         // Remove from favorites - DELETE endpoint expects pokeId in URL
-        console.log(`DELETE ${API_BASE}/users/${user.uid}/pokemon-favorites/${poke.pokeId}`);
+        const deleteUrl = `${API_BASE}/users/${user.uid}/pokemon-favorites/${poke.pokeId}`;
+        console.log(`DELETE ${deleteUrl}`);
         
         // Update UI immediately
         const updatedFavorites = favorites.filter((f) => f.pokeId !== poke.pokeId);
         setFavorites(updatedFavorites);
         setFavoriteIds(updatedFavorites.map((p) => p.pokeId));
 
-        const response = await fetch(`${API_BASE}/users/${user.uid}/pokemon-favorites/${poke.pokeId}`, {
+        const response = await fetch(deleteUrl, {
           method: 'DELETE',
         });
 
+        console.log(`Delete response status: ${response.status}`);
+        const responseText = await response.text();
+        console.log(`Delete response text: ${responseText}`);
+
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          let errorData;
+          try {
+            errorData = JSON.parse(responseText);
+          } catch {
+            errorData = { error: responseText };
+          }
           console.error('Failed to remove from favorites:', errorData);
           throw new Error(errorData.error || 'Failed to remove from favorites');
         }
 
-        const responseData = await response.json();
-        console.log('Remove favorite response:', responseData);
+        console.log('Successfully removed from favorites');
         
         // If currently viewing favorites, refresh the displayed pokemon
         if (filterType === 'favorites') {
@@ -211,18 +241,28 @@ export default function PokedexScreen() {
         }
       } else {
         // Add to favorites - POST endpoint expects { name, id } in body
-        console.log(`POST ${API_BASE}/users/${user.uid}/pokemon-favorites with id: ${poke.pokeId}`);
+        const postUrl = `${API_BASE}/users/${user.uid}/pokemon-favorites`;
+        const postBody = { id: poke.pokeId };
+        console.log(`POST ${postUrl}`);
+        console.log('POST body:', postBody);
         
-        const response = await fetch(`${API_BASE}/users/${user.uid}/pokemon-favorites`, {
+        const response = await fetch(postUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            id: poke.pokeId  // Backend accepts 'id' or 'name'
-          }),
+          body: JSON.stringify(postBody),
         });
 
+        console.log(`Post response status: ${response.status}`);
+        const responseText = await response.text();
+        console.log(`Post response text: ${responseText}`);
+
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          let errorData;
+          try {
+            errorData = JSON.parse(responseText);
+          } catch {
+            errorData = { error: responseText };
+          }
           console.error('Failed to add to favorites:', errorData);
           
           // Handle duplicate error gracefully
@@ -233,11 +273,22 @@ export default function PokedexScreen() {
             return;
           }
           
+          // Handle user not found error
+          if (response.status === 404) {
+            Alert.alert('Error', 'User profile not found. Please log out and log back in.');
+            return;
+          }
+          
           throw new Error(errorData.error || 'Failed to add to favorites');
         }
 
-        const responseData = await response.json();
-        console.log('Add favorite response:', responseData);
+        let responseData;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          responseData = {};
+        }
+        console.log('Add favorite response data:', responseData);
         
         // Backend returns { message, favorite } where favorite is the full pokemon object
         const addedPokemon = responseData.favorite || poke;
@@ -246,6 +297,7 @@ export default function PokedexScreen() {
         const updatedFavorites = [...favorites, addedPokemon];
         setFavorites(updatedFavorites);
         setFavoriteIds(updatedFavorites.map((p) => p.pokeId));
+        console.log('Successfully added to favorites');
       }
     } catch (error: any) {
       console.error('Error toggling favorite:', error);

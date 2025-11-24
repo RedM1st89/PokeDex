@@ -1,3 +1,4 @@
+
 import { useAuth } from '@/context/AuthContext';
 import { Redirect } from 'expo-router';
 import React, { useState } from 'react';
@@ -12,7 +13,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -26,7 +26,7 @@ export default function AuthScreen() {
 
   // If user is already logged in, redirect to main app
   if (user) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/" />;
   }
 
   const handleAuth = async () => {
