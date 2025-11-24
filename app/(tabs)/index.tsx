@@ -3,16 +3,16 @@ import { useAuth } from '@/context/AuthContext';
 import { Redirect, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface Pokemon {
@@ -24,6 +24,7 @@ interface Pokemon {
   weight: number;
   abilities: Array<{ name: string; isHidden: boolean }>;
   stats: Array<{ name: string; baseStat: number }>;
+  addedAt?: string; // From favorites endpoint
 }
 
 export default function PokedexScreen() {
@@ -39,36 +40,48 @@ export default function PokedexScreen() {
     'all'
   );
   const [favorites, setFavorites] = useState<Pokemon[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [totalPokemon, setTotalPokemon] = useState(0);
   const [loadingPokemon, setLoadingPokemon] = useState(false);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   const ITEMS_PER_PAGE = 5;
 
-  // Redirect to auth if not logged in
-  if (authLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#e74c3c" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
-
-  if (!user) {
-    return <Redirect href="/auth" />;
-  }
-
-  // Fetch user favorites
+  // Fetch user favorites from MongoDB
   const fetchFavorites = async (firebaseUid: string) => {
     try {
+      setLoadingFavorites(true);
+      console.log('Fetching favorites for user:', firebaseUid);
+      
       const response = await fetch(`${API_BASE}/users/${firebaseUid}/pokemon-favorites`);
-      if (response.ok) {
-        const data = await response.json();
-        setFavorites(data.pokemonFavorites || []);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('User not found or no favorites');
+          setFavorites([]);
+          setFavoriteIds([]);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log('Favorites response:', data);
+      
+      // The endpoint returns { pokemonFavorites: [...] }
+      const favoritePokemon = data.pokemonFavorites || [];
+      setFavorites(favoritePokemon);
+      
+      // Store just the IDs for quick lookup
+      setFavoriteIds(favoritePokemon.map((p: Pokemon) => p.pokeId));
+      console.log(`Loaded ${favoritePokemon.length} favorites`);
     } catch (error) {
       console.error('Error fetching favorites:', error);
+      setFavorites([]);
+      setFavoriteIds([]);
+    } finally {
+      setLoadingFavorites(false);
     }
   };
 
@@ -79,6 +92,7 @@ export default function PokedexScreen() {
       const offset = page * ITEMS_PER_PAGE;
 
       if (filter === 'favorites') {
+        // Display favorites from the already fetched list
         const start = offset;
         const end = start + ITEMS_PER_PAGE;
         setPokemon(favorites.slice(start, end));
@@ -157,28 +171,90 @@ export default function PokedexScreen() {
     setLoadingPokemon(false);
   };
 
-  // Toggle favorite
+  // Toggle favorite - works with the backend endpoints
   const toggleFavorite = async (poke: Pokemon) => {
     if (!user) return;
 
-    const isFavorited = favorites.some((f) => f.pokeId === poke.pokeId);
+    const isFavorited = favoriteIds.includes(poke.pokeId);
+    console.log(`Toggling favorite for ${poke.name} (ID: ${poke.pokeId}), currently favorited: ${isFavorited}`);
+
+    // Optimistic UI update
+    const previousFavorites = [...favorites];
+    const previousFavoriteIds = [...favoriteIds];
 
     try {
       if (isFavorited) {
-        await fetch(`${API_BASE}/users/${user.uid}/pokemon-favorites/${poke.pokeId}`, {
+        // Remove from favorites - DELETE endpoint expects pokeId in URL
+        console.log(`DELETE ${API_BASE}/users/${user.uid}/pokemon-favorites/${poke.pokeId}`);
+        
+        // Update UI immediately
+        const updatedFavorites = favorites.filter((f) => f.pokeId !== poke.pokeId);
+        setFavorites(updatedFavorites);
+        setFavoriteIds(updatedFavorites.map((p) => p.pokeId));
+
+        const response = await fetch(`${API_BASE}/users/${user.uid}/pokemon-favorites/${poke.pokeId}`, {
           method: 'DELETE',
         });
-        setFavorites(favorites.filter((f) => f.pokeId !== poke.pokeId));
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Failed to remove from favorites:', errorData);
+          throw new Error(errorData.error || 'Failed to remove from favorites');
+        }
+
+        const responseData = await response.json();
+        console.log('Remove favorite response:', responseData);
+        
+        // If currently viewing favorites, refresh the displayed pokemon
+        if (filterType === 'favorites') {
+          fetchPokemon(currentPage, searchQuery, filterType);
+        }
       } else {
-        await fetch(`${API_BASE}/users/${user.uid}/pokemon-favorites`, {
+        // Add to favorites - POST endpoint expects { name, id } in body
+        console.log(`POST ${API_BASE}/users/${user.uid}/pokemon-favorites with id: ${poke.pokeId}`);
+        
+        const response = await fetch(`${API_BASE}/users/${user.uid}/pokemon-favorites`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: poke.pokeId }),
+          body: JSON.stringify({ 
+            id: poke.pokeId  // Backend accepts 'id' or 'name'
+          }),
         });
-        setFavorites([...favorites, poke]);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Failed to add to favorites:', errorData);
+          
+          // Handle duplicate error gracefully
+          if (response.status === 409) {
+            console.log('Pokemon already in favorites');
+            // Just refresh the favorites list
+            await fetchFavorites(user.uid);
+            return;
+          }
+          
+          throw new Error(errorData.error || 'Failed to add to favorites');
+        }
+
+        const responseData = await response.json();
+        console.log('Add favorite response:', responseData);
+        
+        // Backend returns { message, favorite } where favorite is the full pokemon object
+        const addedPokemon = responseData.favorite || poke;
+        
+        // Update UI
+        const updatedFavorites = [...favorites, addedPokemon];
+        setFavorites(updatedFavorites);
+        setFavoriteIds(updatedFavorites.map((p) => p.pokeId));
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update favorites');
+    } catch (error: any) {
+      console.error('Error toggling favorite:', error);
+      
+      // Revert optimistic update on error
+      setFavorites(previousFavorites);
+      setFavoriteIds(previousFavoriteIds);
+      
+      Alert.alert('Error', error.message || 'Failed to update favorites');
     }
   };
 
@@ -197,30 +273,52 @@ export default function PokedexScreen() {
     }
   };
 
-  // Load pokemon when page changes
+  // Initial load - fetch favorites and pokemon
   useEffect(() => {
     if (user) {
+      const initialize = async () => {
+        console.log('Initializing app for user:', user.uid);
+        await fetchFavorites(user.uid);
+        await fetchPokemon(0, '', 'all');
+      };
+      initialize();
+    }
+  }, [user]);
+
+  // Load pokemon when page changes (skip initial load by checking if we have data)
+  useEffect(() => {
+    if (user && totalPokemon > 0) {
+      console.log('Page changed to:', currentPage);
       fetchPokemon(currentPage, searchQuery, filterType);
     }
   }, [currentPage]);
-
-  // Initial load
-  useEffect(() => {
-    if (user) {
-      fetchFavorites(user.uid);
-      fetchPokemon(0, '', 'all');
-    }
-  }, [user]);
 
   const totalPages = Math.ceil(totalPokemon / ITEMS_PER_PAGE);
   const canGoPrev = currentPage > 0;
   const canGoNext = currentPage < totalPages - 1;
 
+  // Redirect to auth if not logged in (AFTER all hooks)
+  if (authLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#e74c3c" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/auth" />;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Pokédex</Text>
-        <TouchableOpacity onPress={handleLogout}>
+        <View>
+          <Text style={styles.headerTitle}>Pokédex</Text>
+          {user && <Text style={styles.userEmail}>{user.email}</Text>}
+        </View>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -250,7 +348,7 @@ export default function PokedexScreen() {
             ? 'Type'
             : filterType === 'number'
             ? 'Number'
-            : 'Favorites'}
+            : `Favorites (${favorites.length})`}
         </Text>
         <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
           <Text style={styles.searchButtonText}>Search</Text>
@@ -267,18 +365,22 @@ export default function PokedexScreen() {
         </TouchableOpacity>
 
         <View style={styles.pokemonGrid}>
-          {loadingPokemon ? (
-            <ActivityIndicator size="large" color="#e74c3c" />
+          {loadingPokemon || loadingFavorites ? (
+            <View style={styles.loadingCenter}>
+              <ActivityIndicator size="large" color="#e74c3c" />
+            </View>
           ) : pokemon.length === 0 ? (
-            <Text style={styles.noResults}>No Pokémon found</Text>
+            <Text style={styles.noResults}>
+              {filterType === 'favorites' ? 'No favorite Pokémon yet' : 'No Pokémon found'}
+            </Text>
           ) : (
             pokemon.map((poke, index) => {
-              const isFavorited = favorites.some((f) => f.pokeId === poke.pokeId);
+              const isFavorited = favoriteIds.includes(poke.pokeId);
               const isSelected = selectedPokemon?.pokeId === poke.pokeId;
 
               return (
                 <TouchableOpacity
-                  key={poke.pokeId || index}
+                  key={`${poke.pokeId}-${index}`}
                   style={[styles.pokemonTile, isSelected && styles.pokemonTileSelected]}
                   onPress={() => setSelectedPokemon(poke)}>
                   <View style={styles.tileHeader}>
@@ -291,6 +393,9 @@ export default function PokedexScreen() {
                     source={{ uri: poke.sprite || 'https://via.placeholder.com/96' }}
                     style={styles.sprite}
                   />
+                  <Text style={styles.pokemonName} numberOfLines={1}>
+                    {poke.name}
+                  </Text>
                 </TouchableOpacity>
               );
             })
@@ -343,6 +448,15 @@ export default function PokedexScreen() {
               </Text>
             ))}
           </View>
+
+          {selectedPokemon.addedAt && (
+            <View style={styles.detailSection}>
+              <Text style={styles.detailLabel}>Added to favorites:</Text>
+              <Text style={styles.detailText}>
+                {new Date(selectedPokemon.addedAt).toLocaleDateString()}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       )}
 
@@ -356,12 +470,15 @@ export default function PokedexScreen() {
               <TouchableOpacity
                 key={filter}
                 style={[styles.filterOption, filterType === filter && styles.filterOptionSelected]}
-                onPress={() => {
+                onPress={async () => {
                   setFilterType(filter);
                   setShowFilterModal(false);
                   setSearchQuery('');
                   setCurrentPage(0);
-                  if (filter === 'all' || filter === 'favorites') {
+                  if (filter === 'all') {
+                    fetchPokemon(0, '', filter);
+                  } else if (filter === 'favorites') {
+                    await fetchFavorites(user!.uid);
                     fetchPokemon(0, '', filter);
                   }
                 }}>
@@ -411,6 +528,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
+  loadingCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -423,6 +545,18 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  userEmail: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  logoutButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 6,
   },
   logoutText: {
     color: '#fff',
@@ -503,7 +637,7 @@ const styles = StyleSheet.create({
   },
   pokemonTile: {
     width: 100,
-    height: 130,
+    height: 150,
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 8,
@@ -532,11 +666,19 @@ const styles = StyleSheet.create({
     height: 80,
     resizeMode: 'contain',
   },
+  pokemonName: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#333',
+    textTransform: 'capitalize',
+    marginTop: 2,
+  },
   noResults: {
+    flex: 1,
     textAlign: 'center',
     color: '#999',
     fontSize: 16,
-    padding: 20,
+    paddingTop: 50,
   },
   detailsContainer: {
     flex: 1,
