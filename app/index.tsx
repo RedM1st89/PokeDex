@@ -1,4 +1,4 @@
-import { API_BASE } from '@/config/api';
+import { API_BASE, X_KEY } from '@/config/api';
 import { useAuth } from '@/context/AuthContext';
 import { Redirect, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -54,7 +54,9 @@ export default function PokedexScreen() {
       setLoadingFavorites(true);
       console.log('Fetching favorites for user:', firebaseUid);
       
-      const response = await fetch(`${API_BASE}/users/${firebaseUid}/pokemon-favorites`);
+      const response = await fetch(`${API_BASE}/users/${firebaseUid}/pokemon-favorites`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -102,7 +104,9 @@ export default function PokedexScreen() {
         setPokemon(favorites.slice(start, end));
         setTotalPokemon(favorites.length);
       } else if (filter === 'type' && search) {
-        const response = await fetch(`${API_BASE}/pokemon/type/${search.toLowerCase()}`);
+        const response = await fetch(`${API_BASE}/pokemon/type/${search.toLowerCase()}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
         const data = await response.json();
         const start = offset;
         const end = start + ITEMS_PER_PAGE;
@@ -110,7 +114,9 @@ export default function PokedexScreen() {
         const pokemonSlice = data.results.slice(start, end);
         const detailedPokemon = await Promise.all(
           pokemonSlice.map(async (p: any) => {
-            const detailResponse = await fetch(`${API_BASE}/pokemon/${p.name}`);
+            const detailResponse = await fetch(`${API_BASE}/pokemon/${p.name}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
             const detailData = await detailResponse.json();
             return detailData.pokemon;
           })
@@ -119,13 +125,17 @@ export default function PokedexScreen() {
         setPokemon(detailedPokemon);
         setTotalPokemon(data.count);
       } else if (filter === 'number' && search) {
-        const response = await fetch(`${API_BASE}/pokemon/${search}`);
+        const response = await fetch(`${API_BASE}/pokemon/${search}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
         const data = await response.json();
         setPokemon([data.pokemon]);
         setTotalPokemon(1);
       } else if (filter === 'name' && search) {
         try {
-          const response = await fetch(`${API_BASE}/pokemon/${search.toLowerCase()}`);
+          const response = await fetch(`${API_BASE}/pokemon/${search.toLowerCase()}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
           if (response.ok) {
             const data = await response.json();
             setPokemon([data.pokemon]);
@@ -134,7 +144,9 @@ export default function PokedexScreen() {
             throw new Error('Not found');
           }
         } catch {
-          const response = await fetch(`${API_BASE}/pokemon/search/${search.toLowerCase()}`);
+          const response = await fetch(`${API_BASE}/pokemon/search/${search.toLowerCase()}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
           const data = await response.json();
           const start = offset;
           const end = start + ITEMS_PER_PAGE;
@@ -142,7 +154,9 @@ export default function PokedexScreen() {
           const pokemonSlice = data.results.slice(start, end);
           const detailedPokemon = await Promise.all(
             pokemonSlice.map(async (p: any) => {
-              const detailResponse = await fetch(`${API_BASE}/pokemon/${p.name}`);
+              const detailResponse = await fetch(`${API_BASE}/pokemon/${p.name}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
               const detailData = await detailResponse.json();
               return detailData.pokemon;
             })
@@ -153,7 +167,9 @@ export default function PokedexScreen() {
         }
       } else {
         console.log('Fetching all pokemon, URL:', `${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`);
-        const response = await fetch(`${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`);
+        const response = await fetch(`${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
         console.log('Response status:', response.status);
         
         if (!response.ok) {
@@ -165,7 +181,9 @@ export default function PokedexScreen() {
 
         const detailedPokemon = await Promise.all(
           data.results.map(async (p: any) => {
-            const detailResponse = await fetch(`${API_BASE}/pokemon/${p.name}`);
+            const detailResponse = await fetch(`${API_BASE}/pokemon/${p.name}`, {
+          headers: {'X-API-KEY': X_KEY }
+      });
             const detailData = await detailResponse.json();
             return detailData.pokemon;
           })
@@ -216,6 +234,7 @@ export default function PokedexScreen() {
 
         const response = await fetch(deleteUrl, {
           method: 'DELETE',
+          headers: {'X-API-KEY': X_KEY }
         });
 
         console.log(`Delete response status: ${response.status}`);
@@ -248,7 +267,7 @@ export default function PokedexScreen() {
         
         const response = await fetch(postUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-API-KEY': X_KEY },
           body: JSON.stringify(postBody),
         });
 
