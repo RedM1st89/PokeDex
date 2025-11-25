@@ -29,9 +29,64 @@ interface Pokemon {
   addedAt?: string;
 }
 
-const TILE_SIZE = 100;
-const TILE_MARGIN = 8;
+const TILE_SIZE = 170;
+const TILE_MARGIN = 12;
 const ITEMS_PER_PAGE = 20;
+
+const TYPE_COLORS: Record<string, string> = {
+  normal: '#A8A77A',
+  fire: '#EE8130',
+  water: '#6390F0',
+  electric: '#F7D02C',
+  grass: '#7AC74C',
+  ice: '#96D9D6',
+  fighting: '#C22E28',
+  poison: '#A33EA1',
+  ground: '#E2BF65',
+  flying: '#A98FF3',
+  psychic: '#F95587',
+  bug: '#A6B91A',
+  rock: '#B6A136',
+  ghost: '#735797',
+  dragon: '#6F35FC',
+  dark: '#705746',
+  steel: '#B7B7CE',
+  fairy: '#D685AD',
+};
+
+const TYPE_WEAKNESSES: Record<string, string[]> = {
+  normal: ['fighting'],
+  fire: ['water', 'rock', 'ground'],
+  water: ['electric', 'grass'],
+  electric: ['ground'],
+  grass: ['fire', 'ice', 'poison', 'flying', 'bug'],
+  ice: ['fire', 'fighting', 'rock', 'steel'],
+  fighting: ['flying', 'psychic', 'fairy'],
+  poison: ['ground', 'psychic'],
+  ground: ['water', 'grass', 'ice'],
+  flying: ['electric', 'ice', 'rock'],
+  psychic: ['bug', 'ghost', 'dark'],
+  bug: ['fire', 'flying', 'rock'],
+  rock: ['water', 'grass', 'fighting', 'ground', 'steel'],
+  ghost: ['ghost', 'dark'],
+  dragon: ['ice', 'dragon', 'fairy'],
+  dark: ['fighting', 'bug', 'fairy'],
+  steel: ['fire', 'fighting', 'ground'],
+  fairy: ['poison', 'steel'],
+};
+
+const getTypeColor = (type?: string) => {
+  if (!type) return '#ccc';
+  return TYPE_COLORS[type.toLowerCase()] || '#ccc';
+};
+
+const getWeaknesses = (types: string[] = []) => {
+  const set = new Set<string>();
+  types.forEach((t) => {
+    TYPE_WEAKNESSES[t.toLowerCase()]?.forEach((weak) => set.add(weak));
+  });
+  return Array.from(set).slice(0, 4);
+};
 
 export default function PokedexScreen() {
   const { user, signOut, loading: authLoading } = useAuth();
@@ -46,11 +101,19 @@ export default function PokedexScreen() {
   const [loading, setLoading] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [numColumns, setNumColumns] = useState(3);
+  const [contentSpacing, setContentSpacing] = useState({ top: 400, bottom: 10 });
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const updateColumns = () => {
-      const width = Dimensions.get('window').width - 100; // Subtract nav buttons
-      setNumColumns(Math.floor(width / (TILE_SIZE + TILE_MARGIN * 2)));
+      const screenWidth = Dimensions.get('window').width;
+      const adjustedWidth = screenWidth - 100; // Subtract nav buttons
+      setNumColumns(Math.max(1, Math.floor(adjustedWidth / (TILE_SIZE + TILE_MARGIN * 2))));
+
+      const topOffset = screenWidth >= 1200 ? 380 : screenWidth >= 900 ? 300 : screenWidth >= 600 ? 220 : 140;
+      const bottomPadding = screenWidth >= 900 ? 20 : 50;
+      setContentSpacing({ top: topOffset, bottom: bottomPadding });
+      setIsMobile(screenWidth < 600);
     };
     updateColumns();
     const subscription = Dimensions.addEventListener('change', updateColumns);
@@ -214,7 +277,8 @@ export default function PokedexScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={styles.heroCard}>
+        <View style={styles.heroHeader}>
         <View>
           <Text style={styles.headerTitle}>Pokédex</Text>
           <Text style={styles.userEmail}>{user.email}</Text>
@@ -224,7 +288,7 @@ export default function PokedexScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
           placeholder="Search Pokémon..."
@@ -237,15 +301,23 @@ export default function PokedexScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.filterInfo}>
+        <View style={styles.filterInfoRow}>
         <Text style={styles.filterInfoText}>
           {filterType === 'all' ? 'All' : filterType === 'favorites' ? `Favorites (${favorites.length})` : filterType.charAt(0).toUpperCase() + filterType.slice(1)}
         </Text>
-        <TouchableOpacity onPress={() => { setCurrentPage(0); fetchPokemon(0, searchQuery, filterType); }} style={styles.searchButton}>
+          <TouchableOpacity
+            onPress={() => { setCurrentPage(0); fetchPokemon(0, searchQuery, filterType); }}
+            style={styles.searchButton}>
           <Text style={styles.searchButtonText}>Search</Text>
         </TouchableOpacity>
+        </View>
       </View>
 
+      <ScrollView
+        contentContainerStyle={[
+          styles.appContent,
+          { paddingTop: contentSpacing.top, paddingBottom: contentSpacing.bottom },
+        ]}>
       <View style={styles.gridContainer}>
         <TouchableOpacity
           style={[styles.navButton, currentPage === 0 && styles.navButtonDisabled]}
@@ -264,19 +336,32 @@ export default function PokedexScreen() {
             numColumns={numColumns}
             key={numColumns}
             contentContainerStyle={styles.flatList}
+              columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
             ListEmptyComponent={<Text style={styles.noResults}>{filterType === 'favorites' ? 'No favorites yet' : 'No Pokémon found'}</Text>}
-            renderItem={({ item: poke }) => (
-              <TouchableOpacity style={styles.pokemonTile} onPress={() => setSelectedPokemon(poke)}>
-                <View style={styles.tileHeader}>
-                  <Text style={styles.entryNumber}>#{poke.pokeId}</Text>
-                  <TouchableOpacity onPress={() => toggleFavorite(poke)}>
-                    <Text style={styles.star}>{favoriteIds.includes(poke.pokeId) ? '⭐' : '☆'}</Text>
-                  </TouchableOpacity>
-                </View>
-                <Image source={{ uri: poke.sprite }} style={styles.sprite} />
-                <Text style={styles.pokemonName} numberOfLines={1}>{poke.name}</Text>
-              </TouchableOpacity>
-            )}
+            renderItem={({ item: poke }) => {
+              const primaryType = poke.types?.[0] || 'normal';
+              const typeColor = getTypeColor(primaryType);
+              return (
+                <TouchableOpacity 
+                  style={[
+                    styles.pokemonTile, 
+                    { 
+                      backgroundColor: `${typeColor}15`, 
+                      borderColor: `${typeColor}50` 
+                    }
+                  ]} 
+                  onPress={() => setSelectedPokemon(poke)}>
+                  <View style={styles.tileHeader}>
+                    <Text style={styles.entryNumber}>#{poke.pokeId}</Text>
+                    <TouchableOpacity onPress={() => toggleFavorite(poke)}>
+                      <Text style={styles.star}>{favoriteIds.includes(poke.pokeId) ? '⭐' : '☆'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Image source={{ uri: poke.sprite }} style={styles.sprite} />
+                  <Text style={styles.pokemonName} numberOfLines={1}>{poke.name}</Text>
+                </TouchableOpacity>
+              );
+            }}
           />
         )}
 
@@ -287,25 +372,79 @@ export default function PokedexScreen() {
           <Text style={styles.navButtonText}>▶</Text>
         </TouchableOpacity>
       </View>
+      </ScrollView>
 
-      <Modal visible={!!selectedPokemon} transparent animationType="slide" onRequestClose={() => setSelectedPokemon(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSelectedPokemon(null)}>
-          <TouchableOpacity style={styles.modalContent} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedPokemon(null)}>
-              <Text style={styles.closeButtonText}>×</Text>
+      <Modal visible={!!selectedPokemon} transparent animationType="fade" onRequestClose={() => setSelectedPokemon(null)}>
+        <TouchableOpacity style={[styles.modalOverlay, isMobile && styles.modalOverlayMobile]} activeOpacity={1} onPress={() => setSelectedPokemon(null)}>
+          <TouchableOpacity style={[styles.modalContent, isMobile && styles.modalContentMobile]} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+            <TouchableOpacity style={[styles.closeButton, isMobile && styles.closeButtonMobile]} onPress={() => setSelectedPokemon(null)}>
+              <Text style={[styles.closeButtonText, isMobile && styles.closeButtonTextMobile]}>×</Text>
             </TouchableOpacity>
             {selectedPokemon && (
-              <ScrollView>
-                <Text style={styles.detailTitle}>#{selectedPokemon.pokeId} - {selectedPokemon.name}</Text>
-                <Image source={{ uri: selectedPokemon.sprite }} style={styles.detailSprite} />
-                <Text style={styles.detailLabel}>Types: <Text style={styles.detailText}>{selectedPokemon.types?.join(', ')}</Text></Text>
-                <Text style={styles.detailLabel}>Height: <Text style={styles.detailText}>{selectedPokemon.height} dm</Text></Text>
-                <Text style={styles.detailLabel}>Weight: <Text style={styles.detailText}>{selectedPokemon.weight} hg</Text></Text>
-                <Text style={styles.detailLabel}>Abilities: <Text style={styles.detailText}>{selectedPokemon.abilities?.map(a => a.name).join(', ')}</Text></Text>
-                <Text style={styles.detailLabel}>Stats:</Text>
-                {selectedPokemon.stats?.map((stat, i) => (
-                  <Text key={i} style={styles.statText}>{stat.name}: {stat.baseStat}</Text>
-                ))}
+              <ScrollView contentContainerStyle={[styles.detailScroll, isMobile && styles.detailScrollMobile]}>
+                <View style={[styles.detailCard, isMobile && styles.detailCardMobile]}>
+                  <View style={styles.detailMedia}>
+                    <View style={[styles.detailCircle, isMobile && styles.detailCircleMobile, { backgroundColor: `${getTypeColor(selectedPokemon.types?.[0])}22` }]}>
+                      <Image source={{ uri: selectedPokemon.sprite }} style={[styles.detailSprite, isMobile && styles.detailSpriteMobile]} />
+                    </View>
+                  </View>
+                  <View style={[styles.detailInfo, isMobile && styles.detailInfoMobile]}>
+                    <View style={styles.detailHeaderRow}>
+                      <View>
+                        <Text style={[styles.detailName, isMobile && styles.detailNameMobile]}>{selectedPokemon.name}</Text>
+                        <Text style={[styles.detailTypeLabel, isMobile && styles.detailTypeLabelMobile]}>
+                          {selectedPokemon.types?.[0] || 'unknown'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.detailId, isMobile && styles.detailIdMobile]}>#{selectedPokemon.pokeId}</Text>
+                    </View>
+
+                    <View style={styles.typeChipRow}>
+                      {selectedPokemon.types?.map((type) => (
+                        <Text key={type} style={[styles.typeChip, isMobile && styles.typeChipMobile, { backgroundColor: getTypeColor(type) }]}>
+                          {type}
+                        </Text>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.detailDescription, isMobile && styles.detailDescriptionMobile]}>
+                      {selectedPokemon.abilities?.length
+                        ? `Famous for abilities like ${selectedPokemon.abilities.map((a) => a.name).join(', ')}.`
+                        : 'A mysterious Pokémon with undiscovered traits.'}
+                    </Text>
+
+                    <View style={[styles.detailStatsGrid, isMobile && styles.detailStatsGridMobile]}>
+                      <View style={[styles.statCard, isMobile && styles.statCardMobile]}>
+                        <Text style={[styles.statLabel, isMobile && styles.statLabelMobile]}>Height</Text>
+                        <Text style={[styles.statValue, isMobile && styles.statValueMobile]}>{(selectedPokemon.height / 10).toFixed(1)} m</Text>
+                      </View>
+                      <View style={[styles.statCard, isMobile && styles.statCardMobile]}>
+                        <Text style={[styles.statLabel, isMobile && styles.statLabelMobile]}>Weight</Text>
+                        <Text style={[styles.statValue, isMobile && styles.statValueMobile]}>{(selectedPokemon.weight / 10).toFixed(1)} kg</Text>
+                      </View>
+                      <View style={[styles.statCard, isMobile && styles.statCardMobile]}>
+                        <Text style={[styles.statLabel, isMobile && styles.statLabelMobile]}>Base EXP</Text>
+                        <Text style={[styles.statValue, isMobile && styles.statValueMobile]}>
+                          {selectedPokemon.stats?.reduce((sum, stat) => sum + stat.baseStat, 0)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.weaknessSection}>
+                      <Text style={[styles.weaknessTitle, isMobile && styles.weaknessTitleMobile]}>Weaknesses</Text>
+                      <View style={styles.weaknessChips}>
+                        {getWeaknesses(selectedPokemon.types || []).map((weak) => (
+                          <Text key={weak} style={[styles.weaknessChip, isMobile && styles.weaknessChipMobile, { backgroundColor: `${getTypeColor(weak)}33` }]}>
+                            {weak}
+                          </Text>
+                        ))}
+                        {!getWeaknesses(selectedPokemon.types || []).length && (
+                          <Text style={styles.detailText}>Data unavailable</Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                </View>
               </ScrollView>
             )}
           </TouchableOpacity>
@@ -344,49 +483,208 @@ export default function PokedexScreen() {
 }
 
 const styles = StyleSheet.create({
+  appContent: {
+    flexGrow: 1,
+    paddingHorizontal: 10,
+  },
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
   loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 50, backgroundColor: '#e74c3c' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  userEmail: { fontSize: 12, color: '#fff', opacity: 0.8, marginTop: 2 },
-  logoutButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 6 },
-  logoutText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  searchContainer: { flexDirection: 'row', padding: 15, gap: 10 },
-  searchInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8, backgroundColor: '#fff' },
-  filterButton: { width: 50, backgroundColor: '#3498db', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  filterButtonText: { fontSize: 20 },
-  filterInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingBottom: 10 },
-  filterInfoText: { color: '#666', fontSize: 14 },
-  searchButton: { backgroundColor: '#2ecc71', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 6 },
-  searchButtonText: { color: '#fff', fontWeight: 'bold' },
-  gridContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10 },
+  headerTitle: { fontFamily: 'PressStart2P_400Regular', fontSize: 24, color: '#fff' },
+  heroCard: {
+    backgroundColor: '#e74c3c',
+    paddingHorizontal: 24,
+    paddingTop: 50,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  filterInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  userEmail: { fontFamily: 'PressStart2P_400Regular', fontSize: 10, color: '#fff', opacity: 0.85, marginTop: 6 },
+  logoutButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 6 },
+  logoutText: { fontFamily: 'PressStart2P_400Regular', color: '#fff', fontSize: 12 },
+  searchInput: { fontFamily: 'PressStart2P_400Regular', flex: 1, fontSize: 12, color: '#333' },
+  filterButton: { width: 44, height: 44, backgroundColor: '#3498db', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  filterButtonText: { fontFamily: 'PressStart2P_400Regular', fontSize: 18, color: '#fff' },
+  filterInfoText: { fontFamily: 'PressStart2P_400Regular', color: '#fff', fontSize: 12 },
+  searchButton: { backgroundColor: '#fff', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
+  searchButtonText: { fontFamily: 'PressStart2P_400Regular', color: '#e74c3c', fontSize: 12 },
+  gridContainer: {
+    flex: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 24,
+  },
   navButton: { width: 40, height: 40, backgroundColor: '#3498db', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   navButtonDisabled: { backgroundColor: '#bdc3c7' },
-  navButtonText: { color: '#fff', fontSize: 20 },
-  flatList: { padding: 5 },
-  pokemonTile: { width: TILE_SIZE, margin: TILE_MARGIN, backgroundColor: '#fff', borderRadius: 8, padding: 8, borderWidth: 2, borderColor: '#ddd' },
-  tileHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  entryNumber: { fontSize: 12, fontWeight: 'bold', color: '#666' },
-  star: { fontSize: 18 },
-  sprite: { width: 80, height: 80, resizeMode: 'contain' },
-  pokemonName: { fontSize: 12, textAlign: 'center', color: '#333', textTransform: 'capitalize', marginTop: 2 },
-  noResults: { textAlign: 'center', color: '#999', fontSize: 16, padding: 50 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' },
-  closeButton: { position: 'absolute', top: 10, right: 15, zIndex: 1, padding: 5 },
-  closeButtonText: { fontSize: 36, color: '#666' },
-  detailTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 15, color: '#e74c3c', textTransform: 'capitalize' },
-  detailSprite: { width: 150, height: 150, resizeMode: 'contain', alignSelf: 'center', marginBottom: 20 },
-  detailLabel: { fontSize: 16, fontWeight: 'bold', color: '#333', marginTop: 10 },
-  detailText: { fontSize: 14, color: '#666', fontWeight: 'normal', textTransform: 'capitalize' },
-  statText: { fontSize: 14, color: '#666', marginLeft: 10, textTransform: 'capitalize' },
-  filterModal: { backgroundColor: '#fff', borderRadius: 12, padding: 20, width: '80%', maxWidth: 400 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#333' },
+  navButtonText: { fontFamily: 'PressStart2P_400Regular', color: '#fff', fontSize: 16 },
+  flatList: { paddingHorizontal: 10, paddingVertical: 10 },
+  columnWrapper: { justifyContent: 'flex-start' },
+  pokemonTile: {
+    width: TILE_SIZE,
+    margin: TILE_MARGIN,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#ececec',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  tileHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  entryNumber: { fontFamily: 'PressStart2P_400Regular', fontSize: 10, color: '#666' },
+  star: { fontFamily: 'PressStart2P_400Regular', fontSize: 18 },
+  sprite: { width: 120, height: 120, resizeMode: 'contain', alignSelf: 'center' },
+  pokemonName: { fontFamily: 'PressStart2P_400Regular', fontSize: 12, textAlign: 'center', color: '#333', textTransform: 'capitalize', marginTop: 10 },
+  noResults: { fontFamily: 'PressStart2P_400Regular', textAlign: 'center', color: '#999', fontSize: 14, padding: 50 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 20 },
+  modalOverlayMobile: { paddingHorizontal: 10 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20, maxHeight: '95%', width: '90%', maxWidth: 900, alignSelf: 'center' },
+  modalContentMobile: { padding: 16, width: '98%', maxHeight: '95%' },
+  closeButton: { position: 'absolute', top: 8, right: 12, zIndex: 1, padding: 4 },
+  closeButtonMobile: { top: 8, right: 12, padding: 4 },
+  closeButtonText: { fontSize: 32, color: '#666' },
+  closeButtonTextMobile: { fontSize: 28 },
+  detailScroll: { padding: 12 },
+  detailScrollMobile: { padding: 8 },
+  detailCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    gap: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  detailCardMobile: {
+    flexDirection: 'column',
+    padding: 16,
+    gap: 16,
+  },
+  detailMedia: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  detailCircle: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailCircleMobile: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+  },
+  detailSprite: { width: 180, height: 180, resizeMode: 'contain' },
+  detailSpriteMobile: { width: 120, height: 120 },
+  detailInfo: { flex: 1.3, justifyContent: 'center' },
+  detailInfoMobile: { flex: 0, width: '100%' },
+  detailHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  detailName: { fontFamily: 'PressStart2P_400Regular', fontSize: 16, color: '#222', textTransform: 'uppercase' },
+  detailNameMobile: { fontSize: 14 },
+  detailTypeLabel: { fontFamily: 'PressStart2P_400Regular', fontSize: 11, color: '#777', marginTop: 4, textTransform: 'capitalize' },
+  detailTypeLabelMobile: { fontSize: 10 },
+  detailId: { fontFamily: 'PressStart2P_400Regular', fontSize: 14, color: '#bbb' },
+  detailIdMobile: { fontSize: 12 },
+  typeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  typeChip: {
+    fontFamily: 'PressStart2P_400Regular',
+    color: '#fff',
+    fontSize: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    textTransform: 'capitalize',
+  },
+  typeChipMobile: {
+    fontSize: 9,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  detailDescription: { fontFamily: 'PressStart2P_400Regular', fontSize: 10, color: '#555', lineHeight: 16, marginBottom: 12 },
+  detailDescriptionMobile: { fontSize: 9, lineHeight: 14, marginBottom: 12 },
+  detailStatsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  detailStatsGridMobile: { gap: 8, marginBottom: 12 },
+  statCard: {
+    flexGrow: 1,
+    minWidth: 90,
+    backgroundColor: '#f7f7f7',
+    padding: 10,
+    borderRadius: 12,
+  },
+  statCardMobile: {
+    minWidth: 80,
+    padding: 10,
+    borderRadius: 12,
+  },
+  statLabel: { fontFamily: 'PressStart2P_400Regular', fontSize: 9, color: '#999', marginBottom: 4, textTransform: 'uppercase' },
+  statLabelMobile: { fontSize: 8, marginBottom: 4 },
+  statValue: { fontFamily: 'PressStart2P_400Regular', fontSize: 12, color: '#222' },
+  statValueMobile: { fontSize: 12 },
+  weaknessSection: { marginTop: 4 },
+  weaknessTitle: { fontFamily: 'PressStart2P_400Regular', fontSize: 11, color: '#222', marginBottom: 6 },
+  weaknessTitleMobile: { fontSize: 10, marginBottom: 6 },
+  weaknessChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  weaknessChip: {
+    fontFamily: 'PressStart2P_400Regular',
+    color: '#333',
+    fontSize: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    textTransform: 'capitalize',
+  },
+  weaknessChipMobile: {
+    fontSize: 9,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  detailText: { fontFamily: 'PressStart2P_400Regular', fontSize: 11, color: '#666', textTransform: 'capitalize' },
+  filterModal: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+  modalTitle: { fontFamily: 'PressStart2P_400Regular', fontSize: 16, textAlign: 'center', marginBottom: 20, color: '#333' },
   filterOption: { padding: 15, borderRadius: 8, marginBottom: 10, backgroundColor: '#f5f5f5' },
   filterOptionSelected: { backgroundColor: '#e74c3c' },
-  filterOptionText: { fontSize: 16, textAlign: 'center', color: '#333' },
+  filterOptionText: { fontFamily: 'PressStart2P_400Regular', fontSize: 12, textAlign: 'center', color: '#333' },
   filterOptionTextSelected: { color: '#fff' },
   modalCloseButton: { marginTop: 10, padding: 15, backgroundColor: '#95a5a6', borderRadius: 8 },
-  modalCloseText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+  modalCloseText: { fontFamily: 'PressStart2P_400Regular', color: '#fff', textAlign: 'center', fontSize: 12 },
 });

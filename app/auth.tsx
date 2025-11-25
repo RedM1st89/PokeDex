@@ -6,11 +6,13 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 export default function AuthScreen() {
@@ -23,6 +25,8 @@ export default function AuthScreen() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 500;
 
   // If user is already logged in, redirect to main app
   if (user) {
@@ -122,11 +126,19 @@ export default function AuthScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, isSmallScreen && styles.containerMobile]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={styles.authContainer}>
-        <Text style={styles.title}>🔴 Pokédex</Text>
-        <Text style={styles.subtitle}>{isLogin ? 'Welcome Back!' : 'Create Account'}</Text>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          isSmallScreen && styles.scrollContentMobile,
+        ]}
+        keyboardShouldPersistTaps="handled">
+        <View style={[styles.authContainer, isSmallScreen && styles.authContainerMobile]}>
+          <Text style={[styles.title, isSmallScreen && styles.titleMobile]}>Pokédex</Text>
+          <Text style={[styles.subtitle, isSmallScreen && styles.subtitleMobile]}>
+            {isLogin ? 'Welcome Back!' : 'Create Account'}
+          </Text>
 
         {errorMessage ? (
           <View style={styles.errorContainer}>
@@ -135,7 +147,7 @@ export default function AuthScreen() {
         ) : null}
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, isSmallScreen && styles.inputMobile]}
           placeholder="Email"
           placeholderTextColor="#999"
           value={email}
@@ -150,7 +162,7 @@ export default function AuthScreen() {
         />
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, isSmallScreen && styles.inputMobile]}
           placeholder="Password"
           placeholderTextColor="#999"
           value={password}
@@ -166,7 +178,7 @@ export default function AuthScreen() {
         {!isLogin && (
           <>
             <TextInput
-              style={styles.input}
+              style={[styles.input, isSmallScreen && styles.inputMobile]}
               placeholder="Confirm Password"
               placeholderTextColor="#999"
               value={confirmPassword}
@@ -179,7 +191,7 @@ export default function AuthScreen() {
               testID="confirm-password-input"
             />
             <TextInput
-              style={styles.input}
+              style={[styles.input, isSmallScreen && styles.inputMobile]}
               placeholder="Display Name"
               placeholderTextColor="#999"
               value={displayName}
@@ -194,7 +206,11 @@ export default function AuthScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[
+            styles.button,
+            loading && styles.buttonDisabled,
+            isSmallScreen && styles.buttonMobile,
+          ]}
           onPress={handleAuth}
           disabled={loading}
           testID="auth-button">
@@ -207,15 +223,16 @@ export default function AuthScreen() {
 
         <View style={styles.dividerContainer}>
           <View style={styles.divider} />
-          <Text style={styles.dividerText}>OR</Text>
+          <Text style={[styles.dividerText, isSmallScreen && styles.dividerTextMobile]}>OR</Text>
           <View style={styles.divider} />
         </View>
 
         <TouchableOpacity
           style={[
-            styles.googleButton, 
+            styles.googleButton,
             loading && styles.buttonDisabled,
-            Platform.OS === 'android' && styles.googleButtonDisabled
+            Platform.OS === 'android' && styles.googleButtonDisabled,
+            isSmallScreen && styles.googleButtonMobile,
           ]}
           onPress={handleGoogleSignIn}
           disabled={loading || Platform.OS === 'android'}
@@ -224,26 +241,29 @@ export default function AuthScreen() {
             <ActivityIndicator color="#333" />
           ) : (
             <>
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={[
-                styles.googleButtonText,
-                Platform.OS === 'android' && styles.googleButtonTextDisabled
-              ]}>
+              <Text style={[styles.googleIcon, isSmallScreen && styles.googleIconMobile]}>G</Text>
+              <Text
+                style={[
+                  styles.googleButtonText,
+                  Platform.OS === 'android' && styles.googleButtonTextDisabled,
+                  isSmallScreen && styles.googleButtonTextMobile,
+                ]}>
                 {Platform.OS === 'android' ? 'Google Sign-In (iOS/Web only)' : 'Continue with Google'}
               </Text>
             </>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={toggleMode} 
+        <TouchableOpacity
+          onPress={toggleMode}
           disabled={loading}
           testID="toggle-mode-button">
-          <Text style={styles.link}>
+          <Text style={[styles.link, isSmallScreen && styles.linkMobile]}>
             {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
           </Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -252,24 +272,78 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  containerMobile: {
+    paddingVertical: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  scrollContentMobile: {
+    paddingHorizontal: 16,
   },
   authContainer: {
-    flex: 1,
+    width: '90%',
+    maxWidth: 620,
     justifyContent: 'center',
-    padding: 20,
+    padding: 50,
+    borderRadius: 80,
+    backgroundColor: 'e9e9e9',
+    borderWidth: 0.1,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  authContainerMobile: {
+    width: '100%',
+    maxWidth: 380,
+    padding: 28,
+    borderRadius: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 6,
   },
   title: {
+    fontFamily: 'PressStart2P_400Regular',
     fontSize: 42,
+    letterSpacing: 2,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 10,
+    lineHeight: 40,
+    marginBottom: 14,
     color: '#e74c3c',
   },
+  titleMobile: {
+    fontSize: 32,
+    lineHeight: 34,
+  },
   subtitle: {
-    fontSize: 24,
+    fontFamily: 'PressStart2P_400Regular',
+    fontSize: 20,
+    letterSpacing: 2,
+    fontWeight: 'bold',
+    lineHeight: 24,
     textAlign: 'center',
     marginBottom: 30,
-    color: '#333',
+    color: 'black',
+  },
+  subtitleMobile: {
+    fontSize: 16,
+    lineHeight: 18,
+    marginBottom: 20,
   },
   errorContainer: {
     backgroundColor: '#ffe6e6',
@@ -280,11 +354,13 @@ const styles = StyleSheet.create({
     borderLeftColor: '#e74c3c',
   },
   errorText: {
+    fontFamily: 'PressStart2P_400Regular',
     color: '#c0392b',
     fontSize: 14,
     fontWeight: '500',
   },
   input: {
+    fontFamily: 'PressStart2P_400Regular',
     borderWidth: 1,
     borderColor: '#ddd',
     padding: 15,
@@ -292,6 +368,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
+  },
+  inputMobile: {
+    padding: 12,
+    fontSize: 14,
   },
   button: {
     backgroundColor: '#e74c3c',
@@ -301,10 +381,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     marginTop: 10,
   },
+  buttonMobile: {
+    paddingVertical: 12,
+  },
   buttonDisabled: {
     backgroundColor: '#ccc',
   },
   buttonText: {
+    fontFamily: 'PressStart2P_400Regular',
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
@@ -320,10 +404,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#ddd',
   },
   dividerText: {
+    fontFamily: 'PressStart2P_400Regular',
     marginHorizontal: 10,
     color: '#999',
     fontSize: 14,
     fontWeight: '600',
+  },
+  dividerTextMobile: {
+    fontSize: 12,
   },
   googleButton: {
     backgroundColor: '#fff',
@@ -344,28 +432,46 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  googleButtonMobile: {
+    paddingVertical: 12,
+  },
   googleIcon: {
+    fontFamily: 'PressStart2P_400Regular',
     fontSize: 20,
     fontWeight: 'bold',
     marginRight: 10,
     color: '#4285F4',
   },
+  googleIconMobile: {
+    fontSize: 16,
+    marginRight: 6,
+  },
   googleButtonText: {
+    fontFamily: 'PressStart2P_400Regular',
     color: '#333',
     fontSize: 16,
     fontWeight: '600',
+  },
+  googleButtonTextMobile: {
+    fontSize: 13,
+    lineHeight: 16,
   },
   googleButtonDisabled: {
     backgroundColor: '#f0f0f0',
     opacity: 0.6,
   },
   googleButtonTextDisabled: {
+    fontFamily: 'PressStart2P_400Regular',
     color: '#999',
   },
   link: {
+    fontFamily: 'PressStart2P_400Regular',
     color: '#3498db',
     textAlign: 'center',
     marginTop: 10,
     fontSize: 15,
+  },
+  linkMobile: {
+    fontSize: 12,
   },
 });
