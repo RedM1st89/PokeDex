@@ -90,6 +90,11 @@ export default function AuthScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    // Prevent action on Android
+    if (Platform.OS === 'android') {
+      return;
+    }
+
     setErrorMessage('');
     setLoading(true);
     console.log('Starting Google sign-in...');
@@ -207,16 +212,25 @@ export default function AuthScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.googleButton, loading && styles.buttonDisabled]}
+          style={[
+            styles.googleButton, 
+            loading && styles.buttonDisabled,
+            Platform.OS === 'android' && styles.googleButtonDisabled
+          ]}
           onPress={handleGoogleSignIn}
-          disabled={loading}
+          disabled={loading || Platform.OS === 'android'}
           testID="google-signin-button">
           {loading ? (
             <ActivityIndicator color="#333" />
           ) : (
             <>
               <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
+              <Text style={[
+                styles.googleButtonText,
+                Platform.OS === 'android' && styles.googleButtonTextDisabled
+              ]}>
+                {Platform.OS === 'android' ? 'Google Sign-In (iOS/Web only)' : 'Continue with Google'}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -340,6 +354,13 @@ const styles = StyleSheet.create({
     color: '#333',
     fontSize: 16,
     fontWeight: '600',
+  },
+  googleButtonDisabled: {
+    backgroundColor: '#f0f0f0',
+    opacity: 0.6,
+  },
+  googleButtonTextDisabled: {
+    color: '#999',
   },
   link: {
     color: '#3498db',

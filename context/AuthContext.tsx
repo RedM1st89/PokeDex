@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     iosClientId: iosClientIdGoogle,
     webClientId: webClientIdGoogle,
+    androidClientId: ""
   });
 
   // Helper function to save/update user in MongoDB
@@ -192,6 +193,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
+    // Only allow Google Sign-In on web and iOS
+    if (Platform.OS === 'android') {
+      throw new Error('Google Sign-In is not available on Android');
+    }
+
     try {
       if (Platform.OS === 'web') {
         // On web, use popup
@@ -205,8 +211,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         console.log('Google sign-in successful');
       } else {
-        // On iOS/Android, use expo-auth-session
-        console.log('Signing in with Google (native)...');
+        // On iOS, use expo-auth-session
+        console.log('Signing in with Google (iOS)...');
         // The save will happen automatically in onAuthStateChanged
         await promptAsync();
       }
