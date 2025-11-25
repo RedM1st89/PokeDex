@@ -101,7 +101,7 @@ export default function PokedexScreen() {
   const [loading, setLoading] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [numColumns, setNumColumns] = useState(3);
-  const [contentSpacing, setContentSpacing] = useState({ top: 400, bottom: 10 });
+  const [contentSpacing, setContentSpacing] = useState({ top: 0, bottom: 20 });
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -110,8 +110,10 @@ export default function PokedexScreen() {
       const adjustedWidth = screenWidth - 100; // Subtract nav buttons
       setNumColumns(Math.max(1, Math.floor(adjustedWidth / (TILE_SIZE + TILE_MARGIN * 2))));
 
-      const topOffset = screenWidth >= 1200 ? 380 : screenWidth >= 900 ? 300 : screenWidth >= 600 ? 220 : 140;
-      const bottomPadding = screenWidth >= 900 ? 20 : 50;
+      // Calcular offset basado en el ancho de pantalla para evitar empalmes
+      // Pantallas más pequeñas necesitan más espacio porque el header es relativamente más grande
+      const topOffset = screenWidth >= 1200 ? 30 : screenWidth >= 900 ? 40 : screenWidth >= 600 ? 50 : 60;
+      const bottomPadding = screenWidth >= 900 ? 20 : 30;
       setContentSpacing({ top: topOffset, bottom: bottomPadding });
       setIsMobile(screenWidth < 600);
     };
@@ -313,11 +315,6 @@ export default function PokedexScreen() {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.appContent,
-          { paddingTop: contentSpacing.top, paddingBottom: contentSpacing.bottom },
-        ]}>
       <View style={styles.gridContainer}>
         <TouchableOpacity
           style={[styles.navButton, currentPage === 0 && styles.navButtonDisabled]}
@@ -335,8 +332,12 @@ export default function PokedexScreen() {
             data={pokemon}
             numColumns={numColumns}
             key={numColumns}
-            contentContainerStyle={styles.flatList}
-              columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
+            contentContainerStyle={[
+              styles.flatList,
+              styles.appContent,
+              { paddingTop: contentSpacing.top, paddingBottom: contentSpacing.bottom },
+            ]}
+            columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
             ListEmptyComponent={<Text style={styles.noResults}>{filterType === 'favorites' ? 'No favorites yet' : 'No Pokémon found'}</Text>}
             renderItem={({ item: poke }) => {
               const primaryType = poke.types?.[0] || 'normal';
@@ -351,15 +352,15 @@ export default function PokedexScreen() {
                     }
                   ]} 
                   onPress={() => setSelectedPokemon(poke)}>
-                  <View style={styles.tileHeader}>
-                    <Text style={styles.entryNumber}>#{poke.pokeId}</Text>
-                    <TouchableOpacity onPress={() => toggleFavorite(poke)}>
-                      <Text style={styles.star}>{favoriteIds.includes(poke.pokeId) ? '⭐' : '☆'}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Image source={{ uri: poke.sprite }} style={styles.sprite} />
-                  <Text style={styles.pokemonName} numberOfLines={1}>{poke.name}</Text>
-                </TouchableOpacity>
+                <View style={styles.tileHeader}>
+                  <Text style={styles.entryNumber}>#{poke.pokeId}</Text>
+                  <TouchableOpacity onPress={() => toggleFavorite(poke)}>
+                    <Text style={styles.star}>{favoriteIds.includes(poke.pokeId) ? '⭐' : '☆'}</Text>
+                  </TouchableOpacity>
+                </View>
+                <Image source={{ uri: poke.sprite }} style={styles.sprite} />
+                <Text style={styles.pokemonName} numberOfLines={1}>{poke.name}</Text>
+              </TouchableOpacity>
               );
             }}
           />
@@ -372,7 +373,6 @@ export default function PokedexScreen() {
           <Text style={styles.navButtonText}>▶</Text>
         </TouchableOpacity>
       </View>
-      </ScrollView>
 
       <Modal visible={!!selectedPokemon} transparent animationType="fade" onRequestClose={() => setSelectedPokemon(null)}>
         <TouchableOpacity style={[styles.modalOverlay, isMobile && styles.modalOverlayMobile]} activeOpacity={1} onPress={() => setSelectedPokemon(null)}>
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e74c3c',
     paddingHorizontal: 24,
     paddingTop: 50,
-    paddingBottom: 20,
+    paddingBottom: 24,
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
     shadowColor: '#000',
@@ -503,6 +503,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 6,
+    marginBottom: 0,
+    minHeight: 200,
+    zIndex: 10,
   },
   heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   searchBar: {
@@ -535,17 +538,19 @@ const styles = StyleSheet.create({
   searchButton: { backgroundColor: '#fff', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   searchButtonText: { fontFamily: 'PressStart2P_400Regular', color: '#e74c3c', fontSize: 12 },
   gridContainer: {
-    flex: 0,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 12,
+    paddingTop: 16,
     paddingBottom: 24,
+    marginTop: 0,
   },
   navButton: { width: 40, height: 40, backgroundColor: '#3498db', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   navButtonDisabled: { backgroundColor: '#bdc3c7' },
   navButtonText: { fontFamily: 'PressStart2P_400Regular', color: '#fff', fontSize: 16 },
-  flatList: { paddingHorizontal: 10, paddingVertical: 10 },
+  flatList: { paddingHorizontal: 10, paddingTop: 12, paddingBottom: 10 },
   columnWrapper: { justifyContent: 'flex-start' },
   pokemonTile: {
     width: TILE_SIZE,
