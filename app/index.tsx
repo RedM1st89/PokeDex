@@ -390,12 +390,15 @@ export default function PokedexScreen() {
             data={pokemon}
             numColumns={numColumns}
             key={numColumns}
+            style={{ flex: 1 }}
             contentContainerStyle={[
               styles.flatList,
               styles.appContent,
               { paddingTop: contentSpacing.top, paddingBottom: contentSpacing.bottom },
             ]}
             columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
             ListEmptyComponent={<Text style={styles.noResults}>{filterType === 'favorites' ? 'No favorites yet' : 'No Pokémon found'}</Text>}
             renderItem={({ item: poke }) => {
               const primaryType = poke.types?.[0] || 'normal';
@@ -615,7 +618,7 @@ const styles = StyleSheet.create({
   gridContainer: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: 12,
     paddingHorizontal: 12,
     paddingTop: 16,
