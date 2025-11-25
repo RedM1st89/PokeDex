@@ -1,4 +1,3 @@
-
 import { useAuth } from '@/context/AuthContext';
 import { Redirect } from 'expo-router';
 import React, { useState } from 'react';
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -22,7 +22,7 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const { user, signIn, signUp } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle } = useAuth();
 
   // If user is already logged in, redirect to main app
   if (user) {
@@ -69,13 +69,13 @@ export default function AuthScreen() {
     try {
       if (isLogin) {
         console.log('Attempting sign in...');
-        const result = await signIn(email, password);
-        console.log('Sign in result:', result);
+        await signIn(email, password);
+        console.log('Sign in successful');
         Alert.alert('Success', 'Logged in successfully!');
       } else {
         console.log('Attempting sign up...');
-        const result = await signUp(email, password, displayName);
-        console.log('Sign up result:', result);
+        await signUp(email, password, displayName);
+        console.log('Sign up successful');
         Alert.alert('Success', 'Account created successfully!');
       }
     } catch (error: any) {
@@ -86,6 +86,26 @@ export default function AuthScreen() {
     } finally {
       setLoading(false);
       console.log('Authentication process completed');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage('');
+    setLoading(true);
+    console.log('Starting Google sign-in...');
+
+    try {
+      await signInWithGoogle();
+      console.log('Google sign-in successful');
+      Alert.alert('Success', 'Signed in with Google!');
+    } catch (error: any) {
+      console.error('Google sign-in error:', error);
+      const errorMsg = error.message || error.toString() || 'Failed to sign in with Google';
+      setErrorMessage(errorMsg);
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setLoading(false);
+      console.log('Google sign-in process completed');
     }
   };
 
@@ -180,6 +200,27 @@ export default function AuthScreen() {
           )}
         </TouchableOpacity>
 
+        <View style={styles.dividerContainer}>
+          <View style={styles.divider} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.divider} />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.googleButton, loading && styles.buttonDisabled]}
+          onPress={handleGoogleSignIn}
+          disabled={loading}
+          testID="google-signin-button">
+          {loading ? (
+            <ActivityIndicator color="#333" />
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
         <TouchableOpacity 
           onPress={toggleMode} 
           disabled={loading}
@@ -253,6 +294,52 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ddd',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: '#999',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  googleButton: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 15,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginRight: 10,
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '600',
   },
   link: {
     color: '#3498db',

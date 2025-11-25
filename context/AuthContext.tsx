@@ -1,19 +1,29 @@
 import { API_BASE, X_KEY } from '@/config/api';
-import { auth } from '@/config/firebase';
+import { auth, iosClientIdGoogle, webClientIdGoogle } from '@/config/firebase';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
 import {
+  GoogleAuthProvider,
+  User,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  signInWithCredential,
   signInWithEmailAndPassword,
-  User,
+  signInWithPopup,
+  updateProfile,
 } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -23,15 +33,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Google Sign-In configuration for iOS and Web
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    iosClientId: iosClientIdGoogle,
+    webClientId: webClientIdGoogle,
+  });
+
+  // Helper function to save/update user in MongoDB
+  const saveUserToBackend = async (firebaseUser: User) => {
+    try {
+      console.log('Saving user to MongoDB backend...');
+      const backendResponse = await fetch(`${API_BASE}/users`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'X-API-KEY': X_KEY 
+        },
+        body: JSON.stringify({
+          firebaseUid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        }),
+      });
+
+      if (!backendResponse.ok) {
+        const text = await backendResponse.text();
+        console.error('Backend error posting user:', backendResponse.status, text);
+      } else {
+        const data = await backendResponse.json();
+        console.log('User saved/updated in backend:', data);
+      }
+    } catch (error) {
+      console.error('Error saving user to backend:', error);
+      // Don't throw - allow auth to succeed even if backend fails
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       console.log('Auth state changed:', currentUser?.email || 'No user');
       setUser(currentUser);
       setLoading(false);
+      
+      // If user is authenticated, ensure they exist in MongoDB
+      if (currentUser) {
+        await saveUserToBackend(currentUser);
+      }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Handle Google Sign-In response
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+      signInWithCredential(auth, credential)
+        .then(() => {
+          console.log('Google sign-in successful');
+        })
+        .catch((error) => {
+          console.error('Error signing in with Google credential:', error);
+        });
+    }
+  }, [response]);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -47,22 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (checkResponse.status === 404) {
           console.log('User not found in MongoDB, creating...');
-          // If user doesn't exist in MongoDB, create them
-          const createResponse = await fetch(`${API_BASE}/users`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-API-KEY': X_KEY },
-            body: JSON.stringify({
-              firebaseUid: result.user.uid,
-              email: result.user.email,
-              displayName: result.user.displayName || result.user.email?.split('@')[0] || 'User',
-            }),
-          });
-          
-          if (createResponse.ok) {
-            console.log('User created in MongoDB successfully');
-          } else {
-            console.error('Failed to create user in MongoDB');
-          }
+          await saveUserToBackend(result.user);
         } else if (checkResponse.ok) {
           console.log('User found in MongoDB');
         } else {
@@ -106,26 +157,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       console.log('Firebase sign up successful, UID:', result.user.uid);
       
-      // Create user in MongoDB backend
-      console.log('Creating user in MongoDB backend...');
-      const backendResponse = await fetch(`${API_BASE}/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-KEY': X_KEY },
-        body: JSON.stringify({
-          firebaseUid: result.user.uid,
-          email: result.user.email,
-          displayName: displayName,
-        }),
-      });
-
-      if (!backendResponse.ok) {
-        const errorData = await backendResponse.json().catch(() => ({}));
-        console.error('Backend user creation failed:', errorData);
-        throw new Error('Failed to create user profile in database');
+      // Update display name
+      if (displayName && result.user) {
+        await updateProfile(result.user, { displayName });
+        // Update local state with display name
+        setUser({ ...result.user, displayName } as User);
       }
+      
+      // Create user in MongoDB backend
+      await saveUserToBackend(result.user);
 
-      console.log('User created in MongoDB successfully');
-      setUser(result.user);
       console.log('Sign up complete');
     } catch (error: any) {
       console.error('Sign up error:', error);
@@ -150,6 +191,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signInWithGoogle = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        // On web, use popup
+        console.log('Signing in with Google (web)...');
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        
+        // Save user to MongoDB immediately after login
+        if (result.user) {
+          await saveUserToBackend(result.user);
+        }
+        console.log('Google sign-in successful');
+      } else {
+        // On iOS/Android, use expo-auth-session
+        console.log('Signing in with Google (native)...');
+        // The save will happen automatically in onAuthStateChanged
+        await promptAsync();
+      }
+    } catch (error: any) {
+      console.error('Error signing in with Google:', error);
+      
+      let errorMessage = 'Failed to sign in with Google';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in cancelled';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your connection';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
+    }
+  };
+
   const signOut = async () => {
     try {
       console.log('Signing out...');
@@ -163,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
