@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 
 interface Pokemon {
   pokeId: number;
@@ -103,6 +104,12 @@ export default function PokedexScreen() {
   const [numColumns, setNumColumns] = useState(3);
   const [contentSpacing, setContentSpacing] = useState({ top: 0, bottom: 20 });
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Animación de bounce para el modal
+  const modalScale = useSharedValue(0);
+  const modalOpacity = useSharedValue(0);
+  const modalTranslateY = useSharedValue(-100);
+  const floatingY = useSharedValue(0);
 
   useEffect(() => {
     const updateColumns = () => {
@@ -121,6 +128,48 @@ export default function PokedexScreen() {
     const subscription = Dimensions.addEventListener('change', updateColumns);
     return () => subscription?.remove();
   }, []);
+
+  // Animación de bounce cuando se abre el modal
+  useEffect(() => {
+    if (selectedPokemon) {
+      // Resetear valores
+      modalScale.value = 0;
+      modalOpacity.value = 0;
+      modalTranslateY.value = -100;
+      floatingY.value = 0;
+      // Animar con efecto bounce/spring desde arriba
+      modalScale.value = withSpring(1, {
+        damping: 8,
+        stiffness: 100,
+        mass: 0.5,
+      });
+      modalOpacity.value = withSpring(1, {
+        damping: 10,
+        stiffness: 150,
+      });
+      modalTranslateY.value = withSpring(0, {
+        damping: 8,
+        stiffness: 100,
+        mass: 0.5,
+      });
+      // Iniciar movimiento continuo después de un pequeño delay
+      setTimeout(() => {
+        floatingY.value = withRepeat(
+          withTiming(-15, {
+            duration: 200,
+          }),
+          -1,
+          true
+        );
+      }, 500);
+    } else {
+      // Resetear cuando se cierra
+      modalScale.value = 0;
+      modalOpacity.value = 0;
+      modalTranslateY.value = -100;
+      floatingY.value = 0;
+    }
+  }, [selectedPokemon]);
 
   // Auto-refresh favorites every 3 seconds
   useEffect(() => {
@@ -268,6 +317,15 @@ export default function PokedexScreen() {
     if (user && totalPokemon > 0) fetchPokemon(currentPage, searchQuery, filterType);
   }, [currentPage]);
 
+  // Estilo animado para el modal (debe estar antes de los returns condicionales)
+  const animatedModalStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: modalScale.value },
+      { translateY: modalTranslateY.value + floatingY.value },
+    ],
+    opacity: modalOpacity.value,
+  }));
+
   if (authLoading) return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#e74c3c" />
@@ -376,7 +434,12 @@ export default function PokedexScreen() {
 
       <Modal visible={!!selectedPokemon} transparent animationType="fade" onRequestClose={() => setSelectedPokemon(null)}>
         <TouchableOpacity style={[styles.modalOverlay, isMobile && styles.modalOverlayMobile]} activeOpacity={1} onPress={() => setSelectedPokemon(null)}>
-          <TouchableOpacity style={[styles.modalContent, isMobile && styles.modalContentMobile]} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+          <View 
+            style={[
+              styles.modalContent, 
+              isMobile && styles.modalContentMobile,
+            ]}
+            onStartShouldSetResponder={() => true}>
             <TouchableOpacity style={[styles.closeButton, isMobile && styles.closeButtonMobile]} onPress={() => setSelectedPokemon(null)}>
               <Text style={[styles.closeButtonText, isMobile && styles.closeButtonTextMobile]}>×</Text>
             </TouchableOpacity>
@@ -384,8 +447,20 @@ export default function PokedexScreen() {
               <ScrollView contentContainerStyle={[styles.detailScroll, isMobile && styles.detailScrollMobile]}>
                 <View style={[styles.detailCard, isMobile && styles.detailCardMobile]}>
                   <View style={styles.detailMedia}>
-                    <View style={[styles.detailCircle, isMobile && styles.detailCircleMobile, { backgroundColor: `${getTypeColor(selectedPokemon.types?.[0])}22` }]}>
-                      <Image source={{ uri: selectedPokemon.sprite }} style={[styles.detailSprite, isMobile && styles.detailSpriteMobile]} />
+                    <View 
+                      style={[
+                        styles.detailCircle, 
+                        isMobile && styles.detailCircleMobile, 
+                        { backgroundColor: `${getTypeColor(selectedPokemon.types?.[0])}22` },
+                      ]}>
+                      <Animated.Image 
+                        source={{ uri: selectedPokemon.sprite }} 
+                        style={[
+                          styles.detailSprite, 
+                          isMobile && styles.detailSpriteMobile,
+                          animatedModalStyle,
+                        ]} 
+                      />
                     </View>
                   </View>
                   <View style={[styles.detailInfo, isMobile && styles.detailInfoMobile]}>
@@ -447,7 +522,7 @@ export default function PokedexScreen() {
                 </View>
               </ScrollView>
             )}
-          </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </Modal>
 
