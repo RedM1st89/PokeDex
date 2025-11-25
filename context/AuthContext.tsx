@@ -1,4 +1,4 @@
-import { API_BASE } from '@/config/api';
+import { API_BASE, X_KEY } from '@/config/api';
 import { auth } from '@/config/firebase';
 import {
   createUserWithEmailAndPassword,
@@ -41,14 +41,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Verify user exists in MongoDB backend
       try {
-        const checkResponse = await fetch(`${API_BASE}/users/${result.user.uid}`);
+        const checkResponse = await fetch(`${API_BASE}/users/${result.user.uid}/pokemon-favorites`, {
+            headers: {'X-API-KEY': X_KEY }
+        });
         
         if (checkResponse.status === 404) {
           console.log('User not found in MongoDB, creating...');
           // If user doesn't exist in MongoDB, create them
           const createResponse = await fetch(`${API_BASE}/users`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-API-KEY': X_KEY },
             body: JSON.stringify({
               firebaseUid: result.user.uid,
               email: result.user.email,
@@ -108,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Creating user in MongoDB backend...');
       const backendResponse = await fetch(`${API_BASE}/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-API-KEY': X_KEY },
         body: JSON.stringify({
           firebaseUid: result.user.uid,
           email: result.user.email,
