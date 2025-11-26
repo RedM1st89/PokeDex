@@ -390,7 +390,7 @@ export default function PokedexScreen() {
             data={pokemon}
             numColumns={numColumns}
             key={numColumns}
-            style={{ flex: 1 }}
+            style={[ styles.CenterModal, isMobile && styles.mobileCenterModal ]}
             contentContainerStyle={[
               styles.flatList,
               styles.appContent,
@@ -625,6 +625,8 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     marginTop: 0,
   },
+  mobileCenterModal:{flex: 1, marginLeft: 25},
+  CenterModal:{flex: 1, marginLeft: 0},
   navButton: { width: 40, height: 40, backgroundColor: '#3498db', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   navButtonDisabled: { backgroundColor: '#bdc3c7' },
   navButtonText: { fontFamily: 'PressStart2P_400Regular', color: '#fff', fontSize: 16 },
@@ -653,7 +655,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 20 },
   modalOverlayMobile: { paddingHorizontal: 10 },
   modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20, maxHeight: '95%', width: '90%', maxWidth: 900, alignSelf: 'center' },
-  modalContentMobile: { padding: 16, width: '98%', maxHeight: '95%' },
+  modalContentMobile: { padding: 16, width: '98%', maxHeight: '95%', alignSelf: 'flex-end' },
   closeButton: { position: 'absolute', top: 8, right: 12, zIndex: 1, padding: 4 },
   closeButtonMobile: { top: 8, right: 12, padding: 4 },
   closeButtonText: { fontSize: 32, color: '#666' },
