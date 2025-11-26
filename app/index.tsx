@@ -206,6 +206,19 @@ export default function PokedexScreen() {
     }
   };
 
+  // Función helper para determinar el filtro automáticamente basado en la búsqueda
+  const getAutoFilter = (search: string): 'all' | 'name' | 'number' | 'type' | 'favorites' => {
+    if (!search || search.trim() === '') {
+      return 'all';
+    }
+    // Si es un número, buscar por número
+    if (/^\d+$/.test(search.trim())) {
+      return 'number';
+    }
+    // Si no, buscar por nombre
+    return 'name';
+  };
+
   const fetchPokemon = async (page = 0, search = '', filter: string = 'all') => {
     setLoading(true);
     try {
@@ -227,15 +240,54 @@ export default function PokedexScreen() {
         setPokemon(data.pokemon ? [data.pokemon] : []);
         setTotalPokemon(data.pokemon ? 1 : 0);
       } else if (filter === 'name' && search) {
+        // Siempre usar búsqueda parcial para permitir predicción
         try {
-          const response = await fetch(`${API_BASE}/pokemon/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
-          data = await response.json();
-          setPokemon(data.pokemon ? [data.pokemon] : []);
-          setTotalPokemon(data.pokemon ? 1 : 0);
-        } catch {
           const response = await fetch(`${API_BASE}/pokemon/search/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
           data = await response.json();
-          detailedPokemon = await Promise.all(data.results.slice(offset, offset + ITEMS_PER_PAGE).map(async (p: any) => {
+          // Si hay resultados, obtener los detalles de cada pokémon
+          if (data.results && data.results.length > 0) {
+            detailedPokemon = await Promise.all(data.results.slice(offset, offset + ITEMS_PER_PAGE).map(async (p: any) => {
+              try {
+                const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
+                const pokemonData = await res.json();
+                return pokemonData.pokemon;
+              } catch {
+                return null;
+              }
+            }));
+            setPokemon(detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[]);
+            setTotalPokemon(data.count);
+          } else {
+            // Si no hay resultados en la búsqueda parcial, intentar búsqueda exacta como fallback
+            try {
+              const exactResponse = await fetch(`${API_BASE}/pokemon/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
+              const exactData = await exactResponse.json();
+              setPokemon(exactData.pokemon ? [exactData.pokemon] : []);
+              setTotalPokemon(exactData.pokemon ? 1 : 0);
+            } catch {
+              setPokemon([]);
+              setTotalPokemon(0);
+            }
+          }
+        } catch {
+          // Si falla la búsqueda parcial, intentar búsqueda exacta como fallback
+          try {
+            const exactResponse = await fetch(`${API_BASE}/pokemon/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
+            const exactData = await exactResponse.json();
+            setPokemon(exactData.pokemon ? [exactData.pokemon] : []);
+            setTotalPokemon(exactData.pokemon ? 1 : 0);
+          } catch {
+            setPokemon([]);
+            setTotalPokemon(0);
+          }
+        }
+      } else if (filter === 'type' && search) {
+        const response = await fetch(`${API_BASE}/pokemon/type/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
+        data = await response.json();
+        // Verificar que data.results existe y es un array
+        if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+          const resultsToFetch = data.results.slice(offset, offset + ITEMS_PER_PAGE);
+          detailedPokemon = await Promise.all(resultsToFetch.map(async (p: any) => {
             try {
               const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
               const pokemonData = await res.json();
@@ -244,23 +296,13 @@ export default function PokedexScreen() {
               return null;
             }
           }));
-          setPokemon(detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[]);
-          setTotalPokemon(data.count);
+          const validPokemon = detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[];
+          setPokemon(validPokemon);
+          setTotalPokemon(data.count || data.results.length);
+        } else {
+          setPokemon([]);
+          setTotalPokemon(0);
         }
-      } else if (filter === 'type' && search) {
-        const response = await fetch(`${API_BASE}/pokemon/type/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
-        data = await response.json();
-        detailedPokemon = await Promise.all(data.results.slice(offset, offset + ITEMS_PER_PAGE).map(async (p: any) => {
-          try {
-            const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
-            const pokemonData = await res.json();
-            return pokemonData.pokemon;
-          } catch {
-            return null;
-          }
-        }));
-        setPokemon(detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[]);
-        setTotalPokemon(data.count);
       } else {
         const response = await fetch(`${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`, { headers: { 'X-API-KEY': X_KEY } });
         data = await response.json();
@@ -332,6 +374,35 @@ export default function PokedexScreen() {
     if (user && totalPokemon > 0) fetchPokemon(currentPage, searchQuery, filterType);
   }, [currentPage]);
 
+  // Búsqueda automática mientras el usuario escribe (con debounce)
+  useEffect(() => {
+    if (!user) return;
+    
+    const trimmedQuery = searchQuery.trim();
+    
+    // Si hay texto en la búsqueda, buscar automáticamente después de 500ms
+    if (trimmedQuery.length > 0) {
+      const timeoutId = setTimeout(() => {
+        setCurrentPage(0);
+        // Si el filtro es 'type' o 'favorites', mantenerlo; de lo contrario usar autoFilter
+        const filterToUse = (filterType === 'type' || filterType === 'favorites') 
+          ? filterType 
+          : getAutoFilter(trimmedQuery);
+        fetchPokemon(0, trimmedQuery, filterToUse);
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    } else if (trimmedQuery.length === 0 && filterType === 'all') {
+      // Si se borra el texto y estamos en 'all', mostrar todos los pokémones
+      const timeoutId = setTimeout(() => {
+        setCurrentPage(0);
+        fetchPokemon(0, '', 'all');
+      }, 300);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [searchQuery, filterType]);
+
   // Estilo animado para el modal (debe estar antes de los returns condicionales)
   const animatedModalStyle = useAnimatedStyle(() => ({
     transform: [
@@ -369,7 +440,15 @@ export default function PokedexScreen() {
           placeholder="Search Pokémon..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          onSubmitEditing={() => { setCurrentPage(0); fetchPokemon(0, searchQuery, filterType); }}
+          onSubmitEditing={() => { 
+            const trimmedQuery = searchQuery.trim();
+            setCurrentPage(0); 
+            // Si el filtro es 'type' o 'favorites', mantenerlo; de lo contrario usar autoFilter
+            const filterToUse = (filterType === 'type' || filterType === 'favorites') 
+              ? filterType 
+              : (trimmedQuery ? getAutoFilter(trimmedQuery) : filterType);
+            fetchPokemon(0, trimmedQuery, filterToUse); 
+          }}
         />
         <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilterModal(true)}>
           <Text style={styles.filterButtonText}>⚙️</Text>
@@ -381,7 +460,15 @@ export default function PokedexScreen() {
           {filterType === 'all' ? 'All' : filterType === 'favorites' ? `Favorites (${favorites.length})` : filterType.charAt(0).toUpperCase() + filterType.slice(1)}
         </Text>
           <TouchableOpacity
-            onPress={() => { setCurrentPage(0); fetchPokemon(0, searchQuery, filterType); }}
+            onPress={() => { 
+              const trimmedQuery = searchQuery.trim();
+              setCurrentPage(0); 
+              // Si el filtro es 'type' o 'favorites', mantenerlo; de lo contrario usar autoFilter
+              const filterToUse = (filterType === 'type' || filterType === 'favorites') 
+                ? filterType 
+                : (trimmedQuery ? getAutoFilter(trimmedQuery) : filterType);
+              fetchPokemon(0, trimmedQuery, filterToUse); 
+            }}
             style={styles.searchButton}>
           <Text style={styles.searchButtonText}>Search</Text>
         </TouchableOpacity>
