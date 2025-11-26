@@ -224,41 +224,56 @@ export default function PokedexScreen() {
       if (filter === 'number' && search) {
         const response = await fetch(`${API_BASE}/pokemon/${search}`, { headers: { 'X-API-KEY': X_KEY } });
         data = await response.json();
-        setPokemon([data.pokemon]);
-        setTotalPokemon(1);
+        setPokemon(data.pokemon ? [data.pokemon] : []);
+        setTotalPokemon(data.pokemon ? 1 : 0);
       } else if (filter === 'name' && search) {
         try {
           const response = await fetch(`${API_BASE}/pokemon/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
           data = await response.json();
-          setPokemon([data.pokemon]);
-          setTotalPokemon(1);
+          setPokemon(data.pokemon ? [data.pokemon] : []);
+          setTotalPokemon(data.pokemon ? 1 : 0);
         } catch {
           const response = await fetch(`${API_BASE}/pokemon/search/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
           data = await response.json();
           detailedPokemon = await Promise.all(data.results.slice(offset, offset + ITEMS_PER_PAGE).map(async (p: any) => {
-            const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
-            return (await res.json()).pokemon;
+            try {
+              const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
+              const pokemonData = await res.json();
+              return pokemonData.pokemon;
+            } catch {
+              return null;
+            }
           }));
-          setPokemon(detailedPokemon);
+          setPokemon(detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[]);
           setTotalPokemon(data.count);
         }
       } else if (filter === 'type' && search) {
         const response = await fetch(`${API_BASE}/pokemon/type/${search.toLowerCase()}`, { headers: { 'X-API-KEY': X_KEY } });
         data = await response.json();
         detailedPokemon = await Promise.all(data.results.slice(offset, offset + ITEMS_PER_PAGE).map(async (p: any) => {
-          const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
-          return (await res.json()).pokemon;
+          try {
+            const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
+            const pokemonData = await res.json();
+            return pokemonData.pokemon;
+          } catch {
+            return null;
+          }
         }));
-        setPokemon(detailedPokemon);
+        setPokemon(detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[]);
         setTotalPokemon(data.count);
       } else {
         const response = await fetch(`${API_BASE}/pokemon?limit=${ITEMS_PER_PAGE}&offset=${offset}`, { headers: { 'X-API-KEY': X_KEY } });
         data = await response.json();
         detailedPokemon = await Promise.all(data.results.map(async (p: any) => {
-          const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
-          return (await res.json()).pokemon;
+          try {
+            const res = await fetch(`${API_BASE}/pokemon/${p.name}`, { headers: { 'X-API-KEY': X_KEY } });
+            const pokemonData = await res.json();
+            return pokemonData.pokemon;
+          } catch {
+            return null;
+          }
         }));
-        setPokemon(detailedPokemon);
+        setPokemon(detailedPokemon.filter((p: Pokemon | null) => p !== null && p !== undefined) as Pokemon[]);
         setTotalPokemon(data.total);
       }
     } catch (error) {
@@ -401,6 +416,10 @@ export default function PokedexScreen() {
             nestedScrollEnabled={true}
             ListEmptyComponent={<Text style={styles.noResults}>{filterType === 'favorites' ? 'No favorites yet' : 'No Pokémon found'}</Text>}
             renderItem={({ item: poke }) => {
+              // Validar que poke existe antes de renderizar
+              if (!poke || !poke.pokeId) {
+                return null;
+              }
               const primaryType = poke.types?.[0] || 'normal';
               const typeColor = getTypeColor(primaryType);
               return (
@@ -756,7 +775,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
-  detailText: { fontFamily: 'PressStart2P_400Regular', fontSize: 11, color: '#666', textTransform: 'capitalize' },
+  detailText: { fontFamily: 'PressStart2P_400Regular', fontSize: 11, color: '#f7f7f7', textTransform: 'capitalize' },
   filterModal: {
     backgroundColor: '#fff',
     borderRadius: 12,
